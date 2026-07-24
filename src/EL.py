@@ -98,6 +98,6 @@ try:
     except Exception as e :
         print('Error' ,e)
         conn.close()
-except:
-    print('connection not successful')
+except sql.Error as e:
+    print('Connection Failed due to erroe ', e)
 
