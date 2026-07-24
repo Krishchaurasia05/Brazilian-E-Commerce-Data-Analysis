@@ -33,7 +33,7 @@ try:
         with open(customers_file,"r", encoding="utf-8", newline="") as c:
             cur.copy_expert("COPY customers(customer_id,customer_unique_id," \
             "customer_zip_code_prefix,customer_city,customer_state) " \
-            "FROM STDIN WITH (FORMAT CSV, NULL '' ,HEADER",c)
+            "FROM STDIN WITH (FORMAT CSV, NULL '' ,HEADER)",c)
             conn.commit()
             print("customers Table Loaded")
 
