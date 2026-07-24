@@ -1,6 +1,23 @@
+# Virtual environment
 venv/
+env/
+
+# Environment variables / secrets
 .env
-logs/*
-!logs/.gitkeep
+
+# Python cache
 __pycache__/
 *.pyc
+
+# Raw dataset (large, not committed — see README for source link)
+Dataset/
+
+# Jupyter/notebook checkpoints (if you use notebooks for EDA later)
+.ipynb_checkpoints/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# VS Code settings (optional — remove if you want to share workspace settings)
+.vscode/
