@@ -93,8 +93,10 @@ try:
             seller_state) FROM STDIN WITH (FORMAT CSV, NULL '',HEADER )''',s)
             conn.commit()
             print('Seller Table Loaded')
-            cur.close()
-            conn.close()
+        print('All files Loaded')
+        cur.close()
+        conn.close()
+        print('Connection Closed')
     except Exception as e :
         print('Error' ,e)
         conn.close()
