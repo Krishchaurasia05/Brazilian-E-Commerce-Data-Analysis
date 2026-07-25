@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS products(
   product_width_cm INT
 );
 
-CREATE TABLE IF NOT EXISTS seller(
+CREATE TABLE IF NOT EXISTS sellers(
   seller_ID VARCHAR(225),
   seller_zip_code_prefix VARCHAR(225),
   seller_city VARCHAR(225),

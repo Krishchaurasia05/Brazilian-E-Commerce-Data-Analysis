@@ -1,3 +1,33 @@
+"""
+Description -- 
+
+Handles Extract & Load for the E-Commerce Analytics Platform.
+
+Responsible for:
+- Reading raw Olist dataset CSVs (customers, geolocation, orders, order
+  items, order payments, order reviews, products, product category
+  translations, sellers) from the local Dataset/ folder
+- Loading each file into its corresponding Bronze-layer staging table in
+  PostgreSQL using psycopg2's copy_expert (bulk COPY), rather than
+  row-by-row inserts, for fast, unmodified data landing
+- Connecting securely using database credentials from environment
+  variables (.env), never hardcoded
+
+Design notes:
+- Every Bronze-layer column is loaded as VARCHAR, regardless of its
+  eventual "true" type. No cleaning, casting, or transformation happens
+  here — this file's only responsibility is getting raw data into the
+  database exactly as it exists in the source CSVs.
+- All type casting, whitespace handling, and data quality fixes are
+  deliberately deferred to the Silver-layer SQL transformations (see
+  sql/silver/), not handled in this script.
+
+This module does not call any external API and does not perform any
+transformation — see enrich_api.py for currency data ingestion, and the
+sql/silver and sql/gold scripts for all transformation logic.
+"""
+
+
 import psycopg2 as sql
 import pandas as pd
 import os

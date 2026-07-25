@@ -1,15 +1,24 @@
-cat > /mnt/user-data/outputs/README.md << 'EOF'
 # E-Commerce Analytics Platform
 
 An end-to-end analytics platform built on the Olist Brazilian E-Commerce public dataset — combining internal transactional data with live currency exchange rate data, modeled through a Medallion Architecture, and delivered as a business-facing Power BI dashboard with basic sales forecasting.
 
-**Status:** In progress — Bronze layer (Extract & Load) complete, Silver/Gold transformation, API enrichment, EDA/forecasting, and Power BI reporting in development.
+**Status:** In progress — Bronze layer complete (loaded, data-quality checked). Silver layer transformation in development.
 
 ---
 
 ## Business Problem
 
-An e-commerce marketplace operating across Brazil needs reliable, business-ready reporting on sales performance, customer behavior, and product trends — but its raw operational data is spread across multiple disconnected systems (orders, payments, products, sellers, reviews) and recorded only in local currency (BRL). Stakeholders reporting internationally need this converted and modeled into something they can actually act on.
+Olist is a Brazilian e-commerce marketplace connecting small and medium sellers with customers across the platform. Leadership needs clear, reliable reporting to make decisions about growth, customer experience, and seller performance — but raw operational data is scattered across disconnected systems (orders, payments, reviews, products, sellers), with no unified reporting layer, and all financial figures are recorded only in local currency (BRL), limiting usefulness for stakeholders reporting internationally.
+
+### Key business questions this project answers
+
+- **Revenue & sales performance** — total revenue trends over time, top-performing product categories, and revenue converted to USD for international reporting
+- **Customer behavior & satisfaction** — do delivery delays correlate with lower review scores? How does satisfaction vary by product category or region?
+- **Delivery & logistics performance** — what percentage of orders arrive later than estimated, and how does this vary by seller/customer location?
+- **Seller performance** — which sellers drive the most revenue, and which show consistent delivery or review-score issues?
+- **Product performance** — which categories have high order volume vs. high revenue (not always the same), and which have unusually poor review rates?
+
+The relationship between **delivery delay and review score** is the headline analytical question this project is built around — it requires joining across orders and reviews, deriving a calculated delay metric, and correlating it with satisfaction, rather than just reporting raw totals.
 
 ## Architecture
 
@@ -17,16 +26,18 @@ An e-commerce marketplace operating across Brazil needs reliable, business-ready
 Raw CSVs (Olist dataset)
         │
         ▼
- Python — Extract & Load (psycopg2 COPY)
+ Python — Extract & Load (psycopg2 COPY, bulk loading)
         │
         ▼
- PostgreSQL (Neon) — Bronze Layer (raw, unmodified staging tables)
+ PostgreSQL (Neon) — Bronze Layer
+ (raw data landed as VARCHAR — no assumptions about type until cleaned)
         │
         ▼
  Python — API enrichment (live currency exchange rates)
         │
         ▼
- SQL — Transform: Bronze → Silver (cleaning, type-casting, deduplication)
+ SQL — Transform: Bronze → Silver
+ (data quality checks, TRIM/whitespace handling, correct type casting)
         │
         ▼
  SQL — Transform: Silver → Gold (star schema: fact/dimension tables)
@@ -39,21 +50,20 @@ Python EDA   Power BI
 (reads Gold)  (reads Gold)
 ```
 
-The pipeline follows a strict **ELT** pattern rather than ETL: raw data is loaded first, and all transformation logic (Bronze → Silver → Gold) is written and executed as SQL directly inside PostgreSQL, rather than round-tripped through Python.
+The pipeline follows an **ELT** pattern, not ETL: raw data is loaded first, and all transformation logic (Bronze → Silver → Gold) is written and executed as SQL directly inside PostgreSQL, rather than round-tripped through Python — the same approach modern data teams use with tools like dbt.
 
 ## Tech Stack
 
 | Category | Tools |
 |---|---|
 | Language | Python 3.12 |
-| Data loading | psycopg2 (`copy_expert` — bulk CSV loading) |
+| Data loading | psycopg2 (`copy_expert` — bulk CSV loading via `COPY`) |
 | Database | PostgreSQL (hosted on Neon) |
 | Transformation | SQL (Bronze → Silver → Gold) |
 | Data enrichment | Public currency exchange rate API |
 | Analysis | pandas (EDA), basic time series forecasting |
 | Reporting | Power BI (DAX, KPI dashboards) |
 | Secrets management | python-dotenv |
-| Documentation | Draw.io (ER diagrams, architecture) |
 
 ## Dataset
 
@@ -61,18 +71,20 @@ The pipeline follows a strict **ELT** pattern rather than ETL: raw data is loade
 
 ## Database Schema
 
-### Bronze Layer (raw staging tables)
-Mirrors the original CSV structure exactly, loaded as-is via `COPY` — no transformation, no cleaning. Tables: `customers`, `geolocation`, `order_items`, `order_payments`, `orders_reviews`, `orders`, `product_cat_tran_eng`, `products`, `sellers`.
+### Bronze Layer — raw staging tables
+Every column loaded as `VARCHAR`, exactly as it appears in the source CSVs — no type assumptions made until the data has been examined and cleaned. This avoids load failures caused by unexpected formatting, and keeps type-casting decisions deliberate rather than accidental.
 
-### Silver Layer (cleaned, standardized)
-Bronze data with type casting, deduplication, null handling, and standardization applied — still one row per source record, not yet reshaped into a star schema.
+**Data quality checks performed on Bronze:**
+- Null counts across every column, distinguishing genuinely missing data (e.g., orders never delivered) from expected nulls (e.g., a review left with no written comment)
+- Whitespace checks (`TRIM()` comparisons) across every column to catch leading/trailing space issues before casting to numeric or date types in Silver
 
-### Gold Layer (star schema, business-ready)
-- **Fact table:** grain and structure to be finalized — one row per order item, joined against payments and enriched with converted currency values
+### Silver Layer (in development)
+Bronze data with correct data types applied, whitespace and formatting issues resolved, and deduplication performed — still one row per source record, not yet reshaped into a star schema.
+
+### Gold Layer (planned)
+- **Fact table:** grain and structure to be finalized — order-item level, joined against payments and enriched with converted currency values, including a derived delivery-delay metric
 - **Dimension tables:** `dim_customer`, `dim_product` (enriched with English category names), `dim_seller`, `dim_date`
 - **Reference/enrichment table:** exchange rate data from the currency API
-
-*(Full DDL to be added to `sql/` as each layer is finalized.)*
 
 ## Project Structure
 
@@ -113,10 +125,12 @@ ecommerce-analytics-platform/
 
 ## Key Engineering Decisions
 
-- **ELT over ETL** — transformation logic (Bronze → Silver → Gold) is written in SQL and executed inside the database, not in Python, since it's more efficient for relational, join-heavy modeling than round-tripping data through pandas.
+- **Landing raw data as text (schema-on-read staging)** — every Bronze column is loaded as `VARCHAR`, regardless of its "true" type, so raw CSV quirks (stray whitespace, inconsistent formatting) never cause a failed load. Type casting is a deliberate Silver-layer decision, made only after examining the real data, not assumed upfront.
 - **Bulk loading via `COPY`, not row-by-row inserts** — since Bronze-layer loading involves no transformation, `psycopg2`'s `copy_expert` streams each CSV directly into PostgreSQL, avoiding the network-latency cost of thousands of individual `INSERT` statements (a deliberate improvement over the row-by-row approach used in an earlier project).
+- **ELT over ETL** — transformation logic (Bronze → Silver → Gold) is written in SQL and executed inside the database, not in Python, since it's more efficient for relational, join-heavy modeling than round-tripping data through pandas.
+- **Business questions defined before schema design** — the Silver/Gold layer design is driven by specific analytical questions (revenue trends, delivery-delay vs. review-score correlation, seller and product performance), not by cleaning data indiscriminately. Columns without a clear connection to these questions (e.g., free-text review comments, detailed product packaging dimensions) are retained in Silver for completeness but deliberately excluded from the Gold-layer star schema.
 - **Physical tables at every layer, not views** — since the source dataset is a static, one-time historical snapshot, views would offer no freshness benefit and would force Power BI to recompute expensive joins on every query; materialized tables are the correct choice for both accuracy and dashboard performance here.
-- **API enrichment as a real business need, not a bolted-on feature** — since order values are recorded in BRL, converting revenue to USD via a live exchange rate API reflects a genuine reporting requirement for international stakeholders.
+- **API enrichment as a genuine business need** — since order values are recorded in BRL, converting revenue to USD via a live exchange rate API reflects a real reporting requirement for international stakeholders, not an artificially added feature.
 
 ## Future Improvements
 
@@ -124,9 +138,9 @@ ecommerce-analytics-platform/
 - Rebuild Silver/Gold transformations in dbt for version-controlled, tested transformation logic
 - Add automated data quality tests at each layer
 - Publish the Power BI dashboard to Power BI Service
+- Explore sentiment analysis on free-text review comments as a future extension
 
 ## Author
 
 **Krish Chaurasia**
 [GitHub](https://github.com/Krishchaurasia05) | [LinkedIn](https://linkedin.com/in/krishchaurasia)
-EOF
