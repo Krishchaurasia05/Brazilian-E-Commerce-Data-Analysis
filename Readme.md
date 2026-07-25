@@ -144,4 +144,3 @@ ecommerce-analytics-platform/
 
 **Krish Chaurasia**
 [GitHub](https://github.com/Krishchaurasia05) | [LinkedIn](https://linkedin.com/in/krishchaurasia)
-F
